@@ -66,6 +66,10 @@ DIFFICULTIES = {
 }
 CHEESE_MOVE_DELAY = 1.2
 CHEESE_MOVE_CHANCE = 0.6  # шанс, що сир спробує рухнутися
+MUSIC_VOLUME = 0.4
+MUSIC_MUTED = False
+MUSIC_STOPPED = False
+
 
 
 
@@ -196,7 +200,7 @@ def render_world(
         screen.blit(hp_surf, (x, hud_y + 8))
         x += hp_surf.get_width() + 30
 
-    coin_img = sprites.get("coin") or sprites.get("cheese")
+    coin_img = sprites.get("coin") or sprites.get("cheese")  # якщо coin нема — беремо cheese
     icon_size = 18
     gap = 6
 
@@ -334,7 +338,7 @@ def run_main_menu(screen: pygame.Surface, clock: pygame.time.Clock, font: pygame
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     return False, "", "HARD"
-
+                global MUSIC_VOLUME, MUSIC_MUTED, MUSIC_STOPPED
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         return False, "", "HARD"
@@ -345,6 +349,30 @@ def run_main_menu(screen: pygame.Surface, clock: pygame.time.Clock, font: pygame
 
                     if event.key == pygame.K_BACKSPACE:
                         name = name[:-1]
+
+                    if event.key in (pygame.K_MINUS, pygame.K_KP_MINUS):
+                        MUSIC_VOLUME = max(0.0, MUSIC_VOLUME - 0.05)
+                        if not MUSIC_MUTED:
+                            pygame.mixer.music.set_volume(MUSIC_VOLUME)
+
+                    if event.key in (pygame.K_EQUALS, pygame.K_PLUS, pygame.K_KP_PLUS):
+                        MUSIC_VOLUME = min(1.0, MUSIC_VOLUME + 0.05)
+                        if not MUSIC_MUTED:
+                            pygame.mixer.music.set_volume(MUSIC_VOLUME)
+
+                    if event.key == pygame.K_m:
+                        MUSIC_MUTED = not MUSIC_MUTED
+                        pygame.mixer.music.set_volume(0.0 if MUSIC_MUTED else MUSIC_VOLUME)
+
+                    if event.key == pygame.K_s:
+                        # S = stop / start
+                        if MUSIC_STOPPED:
+                            pygame.mixer.music.play(-1)
+                            pygame.mixer.music.set_volume(0.0 if MUSIC_MUTED else MUSIC_VOLUME)
+                            MUSIC_STOPPED = False
+                        else:
+                            pygame.mixer.music.stop()
+                            MUSIC_STOPPED = True
 
                     if event.key == pygame.K_1:
                         difficulty = "EASY"
@@ -423,6 +451,43 @@ def run_pause_menu(screen: pygame.Surface, clock: pygame.time.Clock, font: pygam
                 if event.key in (pygame.K_DOWN, pygame.K_s):
                     selected = (selected + 1) % len(options)
 
+                global MUSIC_VOLUME, MUSIC_MUTED, MUSIC_STOPPED
+
+                # +/- гучність
+                if event.key in (pygame.K_MINUS, pygame.K_KP_MINUS):
+                    MUSIC_VOLUME = max(0.0, MUSIC_VOLUME - 0.05)
+                    if not MUSIC_MUTED and not MUSIC_STOPPED:
+                        pygame.mixer.music.set_volume(MUSIC_VOLUME)
+
+                elif event.key in (pygame.K_EQUALS, pygame.K_PLUS, pygame.K_KP_PLUS):
+                    MUSIC_VOLUME = min(1.0, MUSIC_VOLUME + 0.05)
+                    if not MUSIC_MUTED and not MUSIC_STOPPED:
+                        pygame.mixer.music.set_volume(MUSIC_VOLUME)
+
+                # M mute
+                elif event.key == pygame.K_m:
+                    MUSIC_MUTED = not MUSIC_MUTED
+                    if not MUSIC_STOPPED:
+                        pygame.mixer.music.set_volume(0.0 if MUSIC_MUTED else MUSIC_VOLUME)
+
+                # S stop/start
+                elif event.key == pygame.K_s:
+                    if MUSIC_STOPPED:
+                        pygame.mixer.music.play(-1)
+                        pygame.mixer.music.set_volume(0.0 if MUSIC_MUTED else MUSIC_VOLUME)
+                        MUSIC_STOPPED = False
+                    else:
+                        pygame.mixer.music.stop()
+                        MUSIC_STOPPED = True
+
+                elif event.key == pygame.K_o:
+                    if MUSIC_STOPPED:
+                        pygame.mixer.music.play(-1)
+                        MUSIC_STOPPED = False
+
+                    MUSIC_MUTED = False
+                    pygame.mixer.music.set_volume(MUSIC_VOLUME)
+
                 if event.key == pygame.K_RETURN:
                     return "resume" if selected == 0 else "menu"
 
@@ -461,6 +526,10 @@ def run_pause_menu(screen: pygame.Surface, clock: pygame.time.Clock, font: pygam
 
         hint = font.render("Enter - вибрати", True, (160, 200, 160))
         screen.blit(hint, (panel.x + 20, panel.y + 150))
+        vol = int(MUSIC_VOLUME * 100)
+        state = "OFF" if MUSIC_STOPPED else ("MUTED" if MUSIC_MUTED else "ON")
+        hint = font.render(f"Sound: {state} | Volume: {vol}%   (+/-)  M-mute  S-stop", True, (220, 220, 220))
+        screen.blit(hint, (20, panel.y + panel.height + 10))
 
         pygame.display.flip()
 
@@ -470,12 +539,19 @@ def main() -> None:
     os.environ['SDL_VIDEO_CENTERED'] = '1'
 
     pygame.init()
+    pygame.mixer.init()
+    pygame.mixer.music.load("assets/Sounds/sound.mp3")
+    pygame.mixer.music.set_volume(MUSIC_VOLUME)
+    pygame.mixer.music.play(-1)
     pygame.display.set_caption("Labirint (pygame)")
     clock = pygame.time.Clock()
 
     screen = pygame.display.set_mode((640, 360))
     font = pygame.font.SysFont(None, 32)
 
+    pygame.mixer.music.load("assets/Sounds/sound.mp3")
+    pygame.mixer.music.set_volume(0.4)  # 0.0 – 1.0
+    pygame.mixer.music.play(-1)  # -1 = нескінченний циклввввц
     menu_bg = None
     if MENU_BG.exists():
         menu_bg = pygame.image.load(MENU_BG.as_posix()).convert()
@@ -486,7 +562,10 @@ def main() -> None:
         pygame.quit()
         return "quit"
 
+
+
     pygame.display.set_caption("Labirint (pygame)")
+
 
     cfg = DIFFICULTIES[difficulty]
     grid, (sx, sy) = generate_perfect_maze_cells(*cfg["size"])
@@ -533,10 +612,19 @@ def main() -> None:
                 running = False
 
             if event.type == pygame.KEYDOWN:
+
+                # відкриття паузи
                 if event.key == pygame.K_ESCAPE:
+                    if not MUSIC_STOPPED:
+                        pygame.mixer.music.pause()
+
                     action = run_pause_menu(screen, clock, font)
 
-                    if action == "quit":
+                    if action == "resume":
+                        if not MUSIC_STOPPED:
+                            pygame.mixer.music.unpause()
+
+                    elif action == "quit":
                         running = False
                         back_to_menu = False
 

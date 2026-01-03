@@ -196,7 +196,7 @@ def render_world(
         screen.blit(hp_surf, (x, hud_y + 8))
         x += hp_surf.get_width() + 30
 
-    coin_img = sprites.get("coin") or sprites.get("cheese")  # якщо coin нема — беремо cheese
+    coin_img = sprites.get("coin") or sprites.get("cheese")
     icon_size = 18
     gap = 6
 

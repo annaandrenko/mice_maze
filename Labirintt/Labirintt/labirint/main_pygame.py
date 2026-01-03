@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from datetime import datetime
+
 import random
 from pathlib import Path
 from typing import Dict, Tuple, Optional
@@ -63,10 +66,13 @@ DIFFICULTIES = {
     },
 }
 CHEESE_MOVE_DELAY = 1.2
-CHEESE_MOVE_CHANCE = 0.6  # шанс, що сир спробує рухнутися
+CHEESE_MOVE_CHANCE = 0.6
 MUSIC_VOLUME = 0.4
 MUSIC_MUTED = False
 MUSIC_STOPPED = False
+SAVES_DIR = Path("saves")
+SAVE_FILE = SAVES_DIR / "players.json"
+
 
 
 
@@ -321,14 +327,30 @@ def spawn_heal_items(maze: Maze, count: int, start_pos: tuple[int, int]) -> None
 
 
 def run_main_menu(screen: pygame.Surface, clock: pygame.time.Clock, font: pygame.font.Font,  bg: pygame.Surface | None,) -> tuple[bool, str, str]:
+
         name = ""
-        active = True
+        name_active = False
         difficulty = "HARD"
+        box = pygame.Rect(40, 240, 300, 36)
+        cursor_timer = 0.0
+        cursor_visible = True
+        total_coins = load_total_coins()
+        small_font = pygame.font.SysFont(None, 20)
 
         while True:
             dt = clock.tick(60) / 1000.0
+            cursor_timer += dt
+            if cursor_timer >= 0.5:  # миготіння кожні 0.5 сек
+                cursor_timer = 0.0
+                cursor_visible = not cursor_visible
 
             for event in pygame.event.get():
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    name_active = box.collidepoint(event.pos)
+                    if name_active:
+                        cursor_visible = True
+                        cursor_timer = 0.0
+
                 if event.type == pygame.QUIT:
                     return False, "", "HARD"
                 global MUSIC_VOLUME, MUSIC_MUTED, MUSIC_STOPPED
@@ -369,10 +391,18 @@ def run_main_menu(screen: pygame.Surface, clock: pygame.time.Clock, font: pygame
 
                     if event.key == pygame.K_1:
                         difficulty = "EASY"
-                    if event.key == pygame.K_2:
+                    elif event.key == pygame.K_2:
                         difficulty = "NORMAL"
-                    if event.key == pygame.K_3:
+                    elif event.key == pygame.K_3:
                         difficulty = "HARD"
+
+                    elif name_active:
+                        if event.key == pygame.K_BACKSPACE:
+                            name = name[:-1]
+                        elif len(event.unicode) == 1 and event.unicode.isprintable():
+                            if len(name) < 16:
+                                name += event.unicode
+
                     elif len(event.unicode) == 1 and event.unicode.isprintable():
                         if len(name) < 16:
                             name += event.unicode
@@ -410,11 +440,21 @@ def run_main_menu(screen: pygame.Surface, clock: pygame.time.Clock, font: pygame
             pygame.draw.rect(screen, (40, 40, 45), box, border_radius=6)
             pygame.draw.rect(screen, (110, 110, 120), box, width=2, border_radius=6)
 
-            text = font.render(name if name else "?...", True, (235, 235, 235) if name else (150, 150, 150))
+            display_name = name
+
+            if name_active and cursor_visible:
+                display_name = (name if name else "") + "|"
+
+            text = font.render(display_name if display_name else "?...", True,
+                               (235, 235, 235) if name else (150, 150, 150))
+            screen.blit(text, (box.x + 10, box.y + 8))
+
             screen.blit(text, (box.x + 10, box.y + 8))
 
             diff_text = font.render(f"Складність: {difficulty} (1–3)", True, (140, 200, 140))
             screen.blit(diff_text, (40, 310))
+
+
 
             hint = font.render("Натисни Enter, щоб почати гру", True, (140, 200, 140))
             screen.blit(hint, (40, 285))
@@ -657,6 +697,57 @@ def run_end_menu(screen: pygame.Surface, clock: pygame.time.Clock, font: pygame.
 
             pygame.display.flip()
 
+def _load_all_players() -> dict:
+    """Return dict with structure: {'players': {name: {'coins': int, 'updated_at': str}}, 'last_player': str}"""
+    try:
+        if not SAVE_FILE.exists():
+            return {"players": {}, "last_player": ""}
+
+        data = json.loads(SAVE_FILE.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return {"players": {}, "last_player": ""}
+
+        data.setdefault("players", {})
+        data.setdefault("last_player", "")
+        return data
+    except Exception:
+        # якщо файл зіпсований/порожній — не валимо гру
+        return {"players": {}, "last_player": ""}
+
+
+def _save_all_players(data: dict) -> None:
+    SAVES_DIR.mkdir(parents=True, exist_ok=True)
+    SAVE_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def load_player_coins(player_name: str) -> int:
+    data = _load_all_players()
+    p = data["players"].get(player_name)
+    if isinstance(p, dict) and isinstance(p.get("coins"), int):
+        return p["coins"]
+    return 0
+
+def load_total_coins() -> int:
+    data = _load_all_players()
+    total = 0
+
+    for p in data.get("players", {}).values():
+        if isinstance(p, dict):
+            total += int(p.get("coins", 0))
+
+    return total
+
+
+
+def save_player_progress(player_name: str, coins: int) -> None:
+    data = _load_all_players()
+    data["players"].setdefault(player_name, {})
+    data["players"][player_name]["coins"] = int(coins)
+    data["players"][player_name]["updated_at"] = datetime.now().isoformat(timespec="seconds")
+    data["last_player"] = player_name
+    _save_all_players(data)
+
+
 
 def main() -> None:
     import os
@@ -678,6 +769,7 @@ def main() -> None:
 
     screen = pygame.display.set_mode((640, 360))
     font = pygame.font.SysFont(None, 32)
+    total_coins = load_total_coins()
 
     pygame.mixer.music.load("assets/Sounds/sound.mp3")
     pygame.mixer.music.set_volume(0.4)  # 0.0 – 1.0
@@ -701,7 +793,8 @@ def main() -> None:
     grid, (sx, sy) = generate_perfect_maze_cells(*cfg["size"])
     maze = Maze(grid)
 
-    player = Player(x=sx, y=sy, name=player_name, coins=0)
+    saved_coins = load_player_coins(player_name)
+    player = Player(x=sx, y=sy, name=player_name, coins=saved_coins)
     player.hp = PLAYER_MAX_HP
 
     invuln = 0.0  # щоб не знімало хп 60 раз/сек
@@ -713,6 +806,7 @@ def main() -> None:
     spawn_cheese(maze, cfg["cheese"], (sx, sy))
     cheese_cd = CHEESE_MOVE_DELAY
     spawn_heal_items(maze, cfg["heal"], (sx, sy))
+
 
     tile = DEFAULT_TILE
     hud_h = 40
@@ -827,6 +921,7 @@ def main() -> None:
         else:
             back_to_menu = False
 
+    save_player_progress(player.name, player.coins)
     pygame.quit()
     return "menu" if back_to_menu else "quit"
 

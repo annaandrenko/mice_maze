@@ -434,8 +434,27 @@ def run_pause_menu(screen: pygame.Surface, clock: pygame.time.Clock, font: pygam
     selected = 0
     options = ["Продовжити", "В головне меню"]
 
+    w, h = screen.get_size()
+
+
+    panel = pygame.Rect(0, 0, 360, 200)
+    panel.center = (w // 2, h // 2)
+
+    hint_gen = hint_generator()
+    current_hint = next(hint_gen)
+    hint_timer = 0.0
+
+
     while True:
         dt = clock.tick(60) / 1000.0
+        hint_timer -= dt
+        if hint_timer <= 0:
+            try:
+                current_hint = next(hint_gen)
+            except StopIteration:
+                hint_gen = hint_generator()
+                current_hint = next(hint_gen)
+            hint_timer = 4.0
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -531,7 +550,22 @@ def run_pause_menu(screen: pygame.Surface, clock: pygame.time.Clock, font: pygam
         hint = font.render(f"Sound: {state} | Volume: {vol}%   (+/-)  M-mute  S-stop", True, (220, 220, 220))
         screen.blit(hint, (20, panel.y + panel.height + 10))
 
+        hint_surface = font.render(current_hint, True, (160, 210, 160))
+        screen.blit(
+            hint_surface,
+            (panel.x + 20, panel.y + panel.height - 30)
+        )
+
         pygame.display.flip()
+
+def hint_generator():
+    hints = [
+        "Збери весь сир",
+        "Уникай котів!",
+        "Натисни ESC для паузи"
+    ]
+    for h in hints:
+        yield h
 
 
 def main() -> None:
@@ -540,9 +574,15 @@ def main() -> None:
 
     pygame.init()
     pygame.mixer.init()
-    pygame.mixer.music.load("assets/Sounds/sound.mp3")
-    pygame.mixer.music.set_volume(MUSIC_VOLUME)
-    pygame.mixer.music.play(-1)
+
+    try:
+        pygame.mixer.music.load("assets/Sounds/sound.ogg")
+        pygame.mixer.music.set_volume(MUSIC_VOLUME)
+        pygame.mixer.music.play(-1)
+    except pygame.error as e:
+        print("Помилка завантаження музики:", e)
+        MUSIC_STOPPED = True
+
     pygame.display.set_caption("Labirint (pygame)")
     clock = pygame.time.Clock()
 

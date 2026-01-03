@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 from enum import Enum, auto
-import time
 
 from input_utils import clear, get_key
 from maze import load_map, Maze
-from cells import Cell
 from player import Player
 from save import load_player, save_player
 from stats import Stats

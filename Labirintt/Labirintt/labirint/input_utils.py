@@ -1,5 +1,7 @@
 from __future__ import annotations
-import os, sys, time
+import os
+import sys
+import time
 
 def clear():
     os.system("cls" if os.name == "nt" else "clear")
@@ -19,7 +21,8 @@ def get_key() -> str:
                 return "enter"
             return ch.lower()
     else:
-        import termios, tty
+        import termios
+        import tty
         fd = sys.stdin.fileno()
         old = termios.tcgetattr(fd)
         try:

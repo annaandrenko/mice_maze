@@ -1,17 +1,15 @@
 from __future__ import annotations
 
 import random
-import sys
 from pathlib import Path
 from typing import Dict, Tuple, Optional
-from dataclasses import dataclass
 
 import pygame
 
 from cells import Cell
 from maze import Maze, generate_perfect_maze_cells
 from player import Player
-from Enemy import Enemy, spawn_enemies, move_enemies
+from Enemy import spawn_enemies, move_enemies
 from enum import Enum, auto
 
 class GameState(Enum):
@@ -246,11 +244,6 @@ def try_move(maze: Maze, player: Player, dx: int, dy: int) -> str:
 
         cell.symbol = " "
         return "heal +1"
-
-    if player.hp <= 0:
-        message = "game over"
-        message_timer = 2.0
-        running = False
 
     player.x, player.y = nx, ny
     return "moved"
@@ -567,6 +560,103 @@ def hint_generator():
     for h in hints:
         yield h
 
+def run_end_menu(screen: pygame.Surface, clock: pygame.time.Clock, font: pygame.font.Font,
+                 is_win: bool, player: Player) -> str:
+
+    if is_win:
+        bg = pygame.image.load("assets/Menu/win.png").convert()
+    else:
+        bg = pygame.image.load("assets/Menu/lose.png").convert()
+
+    bg = pygame.transform.scale(bg, screen.get_size())
+
+    w, h = screen.get_size()
+
+    overlay = pygame.Surface((w, h), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 140))
+
+    screen.blit(bg, (0, 0))
+    screen.blit(overlay, (0, 0))
+
+    panel = pygame.Rect(0, 0, 420, 240)
+    panel.center = (w // 2, h // 2)
+
+    options = ["В головне меню", "Вийти з гри"]
+    selected = 0
+
+    title = "ПЕРЕМОГА!" if is_win else "ПОРАЗКА"
+    subtitle = "Ти дійшов до виходу!" if is_win else "У тебе закінчились HP."
+    hint = "Enter підтвердити   Esc = меню"
+
+
+    while True:
+        # краще створити один раз ДО while True:
+        title_font = pygame.font.SysFont(None, 54)
+        sub_font = pygame.font.SysFont(None, 26)
+        btn_font = pygame.font.SysFont(None, 34)
+
+        while True:
+            dt = clock.tick(60) / 1000.0
+
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    return "quit"
+
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        return "menu"
+
+                    elif event.key in (pygame.K_UP, pygame.K_w):
+                        selected = (selected - 1) % len(options)
+
+                    elif event.key in (pygame.K_DOWN, pygame.K_s):
+                        selected = (selected + 1) % len(options)
+
+                    elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                        return "menu" if selected == 0 else "quit"
+
+            # ==== RENDER ====
+            w, h = screen.get_size()
+
+            overlay = pygame.Surface((w, h), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 140))  # затемнення
+
+            panel_surf = pygame.Surface(panel.size, pygame.SRCALPHA)
+            panel_surf.fill((30, 30, 40, 180))  # 180 = напівпрозорий
+
+            # фон + затемнення + панель
+            screen.blit(bg, (0, 0))
+            screen.blit(overlay, (0, 0))
+            screen.blit(panel_surf, panel.topleft)
+
+            # рамка
+            border_color = (80, 200, 120) if is_win else (220, 80, 80)
+            pygame.draw.rect(screen, border_color, panel, width=3, border_radius=16)
+
+            # тексти
+            t_surf = title_font.render(title, True, (245, 245, 245))
+            s_surf = sub_font.render(subtitle, True, (210, 210, 210))
+            screen.blit(t_surf, (panel.centerx - t_surf.get_width() // 2, panel.y + 22))
+            screen.blit(s_surf, (panel.centerx - s_surf.get_width() // 2, panel.y + 80))
+
+            stats = f"Гравець: {player.name}   |   Coins: {player.coins}   |   HP: {player.hp}"
+            st_surf = sub_font.render(stats, True, (200, 200, 220))
+            screen.blit(st_surf, (panel.centerx - st_surf.get_width() // 2, panel.y + 118))
+
+            # кнопки
+            y0 = panel.y + 155
+            for i, text in enumerate(options):
+                col = (255, 255, 255) if i == selected else (170, 170, 170)
+                prefix = " " if i == selected else "   "
+                b_surf = btn_font.render(prefix + text, True, col)
+                screen.blit(b_surf, (panel.x + 40, y0 + i * 38))
+
+            # підказка
+            h_surf = sub_font.render(hint, True, (170, 170, 170))
+            screen.blit(h_surf, (panel.centerx - h_surf.get_width() // 2, panel.bottom + 18))
+
+            pygame.display.flip()
+
 
 def main() -> None:
     import os
@@ -576,7 +666,7 @@ def main() -> None:
     pygame.mixer.init()
 
     try:
-        pygame.mixer.music.load("assets/Sounds/sound.ogg")
+        pygame.mixer.music.load("assets/Sounds/sound.oog")
         pygame.mixer.music.set_volume(MUSIC_VOLUME)
         pygame.mixer.music.play(-1)
     except pygame.error as e:
@@ -637,6 +727,8 @@ def main() -> None:
     running = True
     move_cooldown = 0.0
     enemy_cd = ENEMY_DELAY
+    end_state = None
+    back_to_menu = False
 
     while running:
         dt = clock.tick(FPS) / 1000.0
@@ -653,24 +745,24 @@ def main() -> None:
 
             if event.type == pygame.KEYDOWN:
 
-                # відкриття паузи
-                if event.key == pygame.K_ESCAPE:
-                    if not MUSIC_STOPPED:
-                        pygame.mixer.music.pause()
-
-                    action = run_pause_menu(screen, clock, font)
-
-                    if action == "resume":
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
                         if not MUSIC_STOPPED:
-                            pygame.mixer.music.unpause()
+                            pygame.mixer.music.pause()
 
-                    elif action == "quit":
-                        running = False
-                        back_to_menu = False
+                        action = run_pause_menu(screen, clock, font)
 
-                    elif action == "menu":
-                        running = False
-                        back_to_menu = True
+                        if action == "resume":
+                            if not MUSIC_STOPPED:
+                                pygame.mixer.music.unpause()
+
+                        elif action == "menu":
+                            running = False
+                            back_to_menu = True
+
+                        elif action == "quit":
+                            running = False
+                            back_to_menu = False
 
                 if event.key == pygame.K_F1:
                     player.hp = min(PLAYER_MAX_HP, player.hp + 1)
@@ -704,6 +796,10 @@ def main() -> None:
             message_timer = 1.2
             move_cooldown = MOVE_DELAY
 
+            if message == "exit":
+                end_state = "win"
+                running = False
+
         render_world(screen, maze, player, enemies, sprites, tile, font)
 
         for e in enemies:
@@ -714,8 +810,7 @@ def main() -> None:
                 message_timer = 1.2
 
         if player.hp <= 0:
-            message = "GAME OVER"
-            message_timer = 2.0
+            end_state = "lose"
             running = False
 
         if message_timer > 0:
@@ -724,6 +819,13 @@ def main() -> None:
             screen.blit(msg, (8, maze.height * tile + 8 + 18))
 
         pygame.display.flip()
+
+    if end_state in ("win", "lose"):
+        action = run_end_menu(screen, clock, font, is_win=(end_state == "win"), player=player)
+        if action == "menu":
+            back_to_menu = True
+        else:
+            back_to_menu = False
 
     pygame.quit()
     return "menu" if back_to_menu else "quit"

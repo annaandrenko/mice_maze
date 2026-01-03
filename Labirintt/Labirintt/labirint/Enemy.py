@@ -1,25 +1,25 @@
 from __future__ import annotations
-from dataclasses import dataclass
+
 import random
+from dataclasses import dataclass
 from typing import List, Tuple
 
+from entity import Entity
 from maze import Maze
+
 WALL_SYM = "#"
-TURN_CHANCE = 0.15
+TURN_CHANCE = 0.22  # шанс “інколи повернути” (можеш змінити)
 
 
 @dataclass
-class Enemy:
-    x: int
-    y: int
-    dx: int
-    dy: int
-    steps_left: int
-    max_steps: int
+class Enemy(Entity):
+    dx: int = 1
+    dy: int = 0
+    steps_left: int = 2
+    max_steps: int = 2
 
 
 def spawn_enemies(maze: Maze, count: int, avoid_xy: Tuple[int, int]) -> List[Enemy]:
-
     enemies: List[Enemy] = []
     tries = 0
 
@@ -56,10 +56,11 @@ def move_enemies(maze: Maze, enemies: List[Enemy]) -> None:
     random.shuffle(order)
 
     for e in order:
+        # інколи змінює напрямок
         if random.random() < TURN_CHANCE:
             if e.dx != 0:
                 e.dx, e.dy = 0, random.choice([-1, 1])
-            else:  # рухався по Y -> переключаємось на X
+            else:
                 e.dx, e.dy = random.choice([-1, 1]), 0
             e.steps_left = e.max_steps
 

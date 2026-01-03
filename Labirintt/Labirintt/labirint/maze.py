@@ -7,12 +7,7 @@ import random
 from cells import Cell
 from player import Player
 from ansi import color, strip_ansi, visible_len
-from collections import deque
 
-
-GAMEPAD_DIR = Path("assets/Gamepad")
-_PAD_TOP_PATH = GAMEPAD_DIR / "padtop.txt"
-_PAD_BOTTOM_PATH = GAMEPAD_DIR / "padbottom.txt"
 
 INNER_W = 34
 INNER_H = 10
@@ -36,15 +31,8 @@ from collections import deque
 
 
 def generate_perfect_maze_cells(width: int, height: int) -> tuple[list[list[Cell]], tuple[int, int]]:
-    """
-    Генерирует лабиринт и возвращает:
-    - grid: List[List[Cell]]
-    - start (x, y): стартовая позиция игрока
-    Гарантируется, что выход достижим.
-    """
     from cell_definer import cell_from_char
 
-    # делаем размеры нечётными
     if width % 2 == 0:
         width += 1
     if height % 2 == 0:
@@ -54,7 +42,6 @@ def generate_perfect_maze_cells(width: int, height: int) -> tuple[list[list[Cell
     FLOOR = " "
     EXIT = "X"
 
-    # --- 1. создаём решётку стен ---
     raw = [[WALL for _ in range(width)] for _ in range(height)]
 
     sx = random.randrange(1, width, 2)
@@ -81,7 +68,6 @@ def generate_perfect_maze_cells(width: int, height: int) -> tuple[list[list[Cell
         if not carved:
             stack.pop()
 
-    # --- 2. BFS: ищем самую дальнюю клетку для выхода ---
     q = deque([(sx, sy)])
     dist = [[-1] * width for _ in range(height)]
     dist[sy][sx] = 0
@@ -101,10 +87,8 @@ def generate_perfect_maze_cells(width: int, height: int) -> tuple[list[list[Cell
                     if dist[ny][nx] > dist[fy][fx]:
                         farthest = (nx, ny)
 
-    # ставим выход в самой дальней точке
     ex, ey = farthest
     raw[ey][ex] = EXIT
-    # конвертируем chars -> Cell
     grid: list[list[Cell]] = []
     for row in raw:
         grid.append([cell_from_char(ch) for ch in row])
@@ -131,28 +115,16 @@ class Maze:
         self.grid[y][x] = cell
 
     def find_symbol(self, symbol: str):
-        """Find first occurrence of a cell symbol.
-
-        Returns (x, y) or None.
-
-        Intentionally demonstrates `for ... else`.
-        """
         for y, row in enumerate(self.grid):
             for x, cell in enumerate(row):
                 if cell.symbol == symbol:
                     return x, y
             else:
-                # Inner loop ended without `break`.
                 continue
         else:
-            # Outer loop ended without finding the symbol.
             return None
 
     def random_empty_cell(self) -> tuple[int, int] | None:
-        """Повертає випадкову порожню клітинку (x, y) або None.
-
-        Порожня = символ пробілу та walkable=True. Вихід 'X' не вважаємо стартом.
-        """
         empties: list[tuple[int, int]] = []
         for y, row in enumerate(self.grid):
             for x, cell in enumerate(row):
@@ -181,18 +153,10 @@ class Maze:
         out.append("Controls: WASD/Arrows move | P pause | B bomb | ESC menu")
         return "\n".join(out)
 
-    # ---------- Gamepad frame ----------
-
-    def _read_gamepad(self) -> Tuple[List[str], List[str]]:
-        pad_top = _PAD_TOP_PATH.read_text(encoding="utf-8").splitlines()
-        pad_bottom = _PAD_BOTTOM_PATH.read_text(encoding="utf-8").splitlines()
-        return pad_top, pad_bottom
 
     def _fit_text(self, s: str, width: int) -> str:
-        # truncate by visible length
         if visible_len(s) <= width:
             return s + (" " * (width - visible_len(s)))
-        # header text has no ANSI codes; simple truncate is enough
         plain = strip_ansi(s)
         if len(plain) > width:
             plain = plain[:width]
@@ -201,7 +165,6 @@ class Maze:
     def _view_bounds(self, player: Player, vw: int, vh: int) -> Tuple[int, int]:
         x0 = player.x - vw // 2
         y0 = player.y - vh // 2
-        # clamp to map bounds while still allowing smaller maps
         if self.width > vw:
             x0 = max(0, min(x0, self.width - vw))
         else:
@@ -228,7 +191,6 @@ class Maze:
         header = self._fit_text(header, INNER_W)
 
         view_lines: List[str] = [header]
-        # We have INNER_H lines total; 1 is header, remaining are map rows (INNER_H-1)
         x1 = x0 + INNER_W  # slice end
         for row_i in range(INNER_H - 1):
             y = y0 + row_i
@@ -236,18 +198,15 @@ class Maze:
                 view_lines.append(" " * INNER_W)
                 continue
 
-            # --- slicing demo: take only the visible part of the row ---
             xL = max(0, x0)
             xR = min(self.width, x1)
-            row_slice = self.grid[y][xL:xR]  # <- slice of the matrix row
+            row_slice = self.grid[y][xL:xR]
 
-            # list comprehension over the slice; we still render with coordinates (player highlight etc.)
             rendered_mid = [
                 self._render_cell(xL + i, y, player)
                 for i, _cell in enumerate(row_slice)
             ]
 
-            # pad left/right if the camera window goes out of bounds
             left_pad = [" "] * max(0, 0 - x0)
             right_pad = [" "] * max(0, x1 - self.width)
 

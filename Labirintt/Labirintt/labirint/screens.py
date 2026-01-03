@@ -32,23 +32,18 @@ def _read_gamepad() -> Tuple[List[str], List[str]]:
 
 
 def _fit_line(s: str, width: int) -> str:
-    # Keep ANSI codes intact for later; truncate based on visible length.
     if visible_len(s) <= width:
         return s + (" " * (width - visible_len(s)))
     plain = strip_ansi(s)
-    # For screen ASCII we typically have no ANSI, so this is good enough.
     if len(plain) > width:
         plain = plain[:width]
     return plain + (" " * (width - len(plain)))
 
 
 def render_in_gamepad(lines: List[str], *, prompt: str = "") -> str:
-    """Render arbitrary text inside the MeowPad screen area (34x10)."""
     pad_top, pad_bottom = _read_gamepad()
 
     content: List[str] = []
-
-    # Crop/pad to INNER_H. If prompt provided, reserve last line for it.
     lines = [ln.rstrip("\n") for ln in lines]
     if prompt:
         prompt_line = _fit_line(prompt, INNER_W)
@@ -57,7 +52,6 @@ def render_in_gamepad(lines: List[str], *, prompt: str = "") -> str:
         prompt_line = ""
         usable_h = INNER_H
 
-    # Prefer the top portion (menus are top-aligned); drop extra lines from bottom.
     body = lines[:usable_h]
     if len(body) < usable_h:
         body.extend([""] * (usable_h - len(body)))
@@ -69,7 +63,6 @@ def render_in_gamepad(lines: List[str], *, prompt: str = "") -> str:
         content.append(prompt_line)
 
     def wrap(line: str) -> str:
-        # Exact wrapper matches maze.py
         return f"| |  {line} |  |"
 
     framed: List[str] = []
@@ -99,50 +92,38 @@ def show_level_selection(best_by_level: dict[str, int] | None = None) -> str:
     clear()
     txt = _read_screen("LevelSelection.txt")
     lines = txt.splitlines()
-    # Use lambda to sort levels numerically by the trailing digits.
     lvls = sorted(
         (p.stem for p in LEVELS_DIR.glob("LVL*.txt")),
         key=lambda name: int("".join(ch for ch in name if ch.isdigit()) or 0),
     )
     best_by_level = best_by_level or {}
-    # Natural extra info: show best result per level (dictionary lookup).
     info = [
         f"{i+1}) {lvl}  best: {best_by_level.get(lvl, '-')}"
         for i, lvl in enumerate(lvls[:6])
     ]
     insert_at = min(6, len(lines))
-    # slicing demo: insert info lines into the screen template
     lines = lines[:insert_at] + [""] + info + lines[insert_at:]
     prompt = "1-6 choose level   ESC back"
     frame = render_in_gamepad(lines, prompt=prompt)
     print(frame)
 
-    # Accept digits, but validate that the corresponding LVL exists.
     while True:
         k = get_key()
         if k == "esc":
             beep("click")
             return "esc"
         if k in ("1", "2", "3", "4", "5", "6"):
-            # for/else demonstration: search in the available list
             wanted = f"LVL{k}"
             for lvl in lvls:
                 if lvl == wanted:
                     beep("click")
                     return k
             else:
-                # Not found: ignore input and keep listening
                 beep("warn")
                 continue
 
 
 def show_shop_menu(player: Player) -> None:
-    """Shop loop.
-
-    Demonstrates:
-    - while-loop game/menu cycles
-    - None return (NoneType) through show_shop()
-    """
     while True:
         item = show_shop(player)
         if item is None:
@@ -197,9 +178,7 @@ def show_victory(player: Player, coins_earned: int) -> str:
     txt = _read_screen("VictoryScreen.txt")
     lines = txt.splitlines()
 
-    # Insert coins line into a blank area if possible
     coins_line = f"+{coins_earned} coins"
-    # Find a likely empty middle line to place it (line 4 is usually blank-ish).
     if len(lines) >= 6:
         lines[4] = lines[4][:2] + coins_line.center(max(0, len(lines[4]) - 4)) + lines[4][-2:]
 

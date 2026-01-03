@@ -4,8 +4,6 @@ from typing import Callable, Dict
 
 from cells import Cell, WallCell, ExitCell
 
-# Dictionary-based dispatch (natural: mapping characters to cell constructors).
-# Demonstrates "Словники".
 _SIMPLE: Dict[str, Callable[[], Cell]] = {
     " ": lambda: Cell(),
     "#": lambda: WallCell(),

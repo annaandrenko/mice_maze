@@ -5,6 +5,7 @@ from typing import List, Tuple
 
 from maze import Maze
 WALL_SYM = "#"
+TURN_CHANCE = 0.15
 
 
 @dataclass
@@ -18,7 +19,7 @@ class Enemy:
 
 
 def spawn_enemies(maze: Maze, count: int, avoid_xy: Tuple[int, int]) -> List[Enemy]:
-    """Спавнить ворогів на порожніх клітинках, не біля старту."""
+
     enemies: List[Enemy] = []
     tries = 0
 
@@ -36,7 +37,6 @@ def spawn_enemies(maze: Maze, count: int, avoid_xy: Tuple[int, int]) -> List[Ene
         if any(e.x == x and e.y == y for e in enemies):
             continue
 
-        # рух: або горизонтально, або вертикально
         if random.random() < 0.5:
             dx, dy = random.choice([-1, 1]), 0
         else:
@@ -49,20 +49,42 @@ def spawn_enemies(maze: Maze, count: int, avoid_xy: Tuple[int, int]) -> List[Ene
 
 
 def move_enemies(maze: Maze, enemies: List[Enemy]) -> None:
-    """Один крок: вороги ходять туди-сюди, відбиваються від стін/меж."""
-    for e in enemies:
+    occupied = {(e.x, e.y) for e in enemies}
+    reserved: set[tuple[int, int]] = set()
+
+    order = enemies[:]
+    random.shuffle(order)
+
+    for e in order:
+        if random.random() < TURN_CHANCE:
+            if e.dx != 0:
+                e.dx, e.dy = 0, random.choice([-1, 1])
+            else:  # рухався по Y -> переключаємось на X
+                e.dx, e.dy = random.choice([-1, 1]), 0
+            e.steps_left = e.max_steps
+
         nx, ny = e.x + e.dx, e.y + e.dy
 
-        # стіна або межа — розвернутись
-        if not (0 <= nx < maze.width and 0 <= ny < maze.height) or maze.cell_at(nx, ny).symbol == WALL_SYM:
+        blocked_by_wall = (
+            not (0 <= nx < maze.width and 0 <= ny < maze.height)
+            or maze.cell_at(nx, ny).symbol == WALL_SYM
+        )
+
+        blocked_by_enemy = (nx, ny) in occupied or (nx, ny) in reserved
+
+        if blocked_by_wall or blocked_by_enemy:
             e.dx *= -1
             e.dy *= -1
             e.steps_left = e.max_steps
+            reserved.add((e.x, e.y))
             continue
 
+        occupied.remove((e.x, e.y))
         e.x, e.y = nx, ny
-        e.steps_left -= 1
+        reserved.add((e.x, e.y))
+        occupied.add((e.x, e.y))
 
+        e.steps_left -= 1
         if e.steps_left <= 0:
             e.dx *= -1
             e.dy *= -1

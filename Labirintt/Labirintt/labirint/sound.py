@@ -27,7 +27,6 @@ def _terminal_bell() -> None:
 
 
 def beep(kind: str = "click") -> None:
-    # bool requirement: SOUND_ENABLED is a boolean flag.
     if not SOUND_ENABLED or not bool(get_option("sound", True)):
         return
     try:
@@ -45,11 +44,10 @@ def beep(kind: str = "click") -> None:
 
 
 def play_wav(path: str) -> None:
-    """Play a wav file if possible (Windows only without extra deps)."""
     if not SOUND_ENABLED:
         return
     try:
-        import winsound  # type: ignore
+        import winsound
         p = Path(path)
         if p.exists():
             winsound.PlaySound(str(p), winsound.SND_FILENAME | winsound.SND_ASYNC)
@@ -59,12 +57,9 @@ def play_wav(path: str) -> None:
         _terminal_bell()
 
 
-# Compatibility with earlier stubs
 def play_background_music(path: str) -> None:
-    # No bundled music in this port; keep as hook.
     return
 
 
 def play_sfx(_path: str) -> None:
-    # We don't ship wav assets; use beep categories instead.
     beep()

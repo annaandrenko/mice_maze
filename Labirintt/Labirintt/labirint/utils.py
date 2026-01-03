@@ -1,13 +1,3 @@
-"""Small helpers used across the project.
-
-This file is intentionally written to satisfy educational checklist items:
-- custom functions
-- optional keyword parameters
-- *args / **kwargs
-- lambda usage (in callers)
-- nested functions and `nonlocal`
-"""
-
 from __future__ import annotations
 
 import time
@@ -15,22 +5,12 @@ from typing import Callable, Optional
 
 
 def log(*parts: object, sep: str = " ", end: str = "\n", **kwargs: object) -> None:
-    """A tiny logger.
 
-    Demonstrates:
-    - `*parts` (variadic positional parameters)
-    - optional keyword parameters (sep/end)
-    - `**kwargs` forwarded to print
-    """
     print(*parts, sep=sep, end=end, **kwargs)
 
 
 def make_countdown(start_minutes: int = 1, start_seconds: int = 30) -> Callable[[], Optional[tuple[int, int]]]:
-    """Return a `tick()` function that decreases time each second.
 
-    - Demonstrates nested function + `nonlocal`.
-    - Returns None when the timer is finished (NoneType requirement).
-    """
 
     minutes = int(start_minutes)
     seconds = int(start_seconds)

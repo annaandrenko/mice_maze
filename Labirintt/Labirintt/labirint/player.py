@@ -28,7 +28,6 @@ class Player:
 
         h = len(grid)
         w = len(grid[0]) if h else 0
-        # Спрощення: лишаємо тільки стіни як руйнівні.
         destroyable = {"#"}
         for yy in range(self.y - 1, self.y + 2):
             for xx in range(self.x - 1, self.x + 2):

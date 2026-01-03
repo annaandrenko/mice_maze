@@ -22,7 +22,6 @@ class GameState(Enum):
 
 
 def _reset_player_for_level(player: Player) -> None:
-    # Спавн у випадковій порожній клітинці буде встановлено під час завантаження рівня.
     player.x, player.y = 0, 0
 
 LEVEL_TIME_MIN = 1
@@ -37,7 +36,6 @@ def run() -> None:
     player = load_player() or Player(x=3, y=1, name="Player", coins=0)
     stats = Stats.load()
 
-    # NoneType demonstration: current_level can be None until a selection happens.
     current_level: str | None = "LVL1.txt"
     state = GameState.MAIN_MENU
 
@@ -67,19 +65,14 @@ def run() -> None:
             state = GameState.MAIN_MENU
 
         elif state == GameState.PLAYING:
-            # current_level is guaranteed to be set here.
             assert current_level is not None
             grid = load_map(_level_path(current_level))
             maze = Maze(grid)
             stats.reset_run()
-
-            # Spawn
-            # Спавн у випадковій порожній точці
             spawn = maze.random_empty_cell() or (0, 0)
             player.x, player.y = spawn
             stats.mark_visited((player.x, player.y))
 
-            # Countdown uses nested function + nonlocal (see utils.make_countdown)
             tick = make_countdown(LEVEL_TIME_MIN, LEVEL_TIME_SEC)
 
             while state == GameState.PLAYING:
@@ -105,7 +98,6 @@ def run() -> None:
                 clear()
                 print(maze.render_gamepad(player, minutes, seconds, urgent=urgent))
 
-                # Read a single key press from keyboard
                 k = get_key()
 
                 if k == "esc":
@@ -136,7 +128,6 @@ def run() -> None:
                     continue
 
                 nx, ny = player.x + dx, player.y + dy
-                # chained comparison requirement: 0 <= nx < width, 0 <= ny < height
                 if not (0 <= nx < maze.width and 0 <= ny < maze.height):
                     continue
 
@@ -152,7 +143,6 @@ def run() -> None:
 
 
                     stats.mark_visited((player.x, player.y))
-                    # Reward: keep your earlier formula (based on remaining time)
                     coins_earned = minutes * 10 + (seconds // 5)
                     player.coins += coins_earned
                     save_player(player)
@@ -172,7 +162,6 @@ def run() -> None:
                         state = GameState.MAIN_MENU
                     break
 
-                # Спрощення: немає дверей/ключів — усе, що walkable, можна пройти.
                 player.x, player.y = nx, ny
                 stats.mark_visited((player.x, player.y))
                 save_player(player)

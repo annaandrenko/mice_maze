@@ -1,20 +1,3 @@
-"""
-Pygame frontend for the console Labirint game.
-
-Run:
-    pip install pygame
-    python -m labirint.main_pygame
-
-Sprites:
-    Put PNG files into assets/Sprites/ with these names:
-        floor.png
-        wall.png
-        player.png
-        exit.png
-
-You can start with any placeholder images; the code will fall back to simple coloured rectangles
-if a sprite is missing.
-"""
 from __future__ import annotations
 
 import random
@@ -43,21 +26,48 @@ SPRITES_DIR = ASSETS / "Sprites"
 
 DEFAULT_TILE = 24
 FPS = 60
-
-# Symbols used by your levels:
 WALL_SYM = "#"
 EXIT_SYM = "X"
 CHEESE_SYM = "C"
 CHEESE_COUNT = 10
 ENEMY_SYM = "E"
 ENEMY_COUNT = 5
-
 PLAYER_MAX_HP = 3
 ENEMY_DAMAGE = 1
 HIT_COOLDOWN = 0.8
 ENEMY_STEP_DELAY = 0.35
 HEAL_SYM = "H"
 HEAL_COUNT = 3
+DIFFICULTIES = {
+    "EASY": {
+        "size": (31, 15),
+        "enemies": 2,
+        "cheese": 8,
+        "heal": 5,
+        "enemy_delay": 0.45,
+        "move_delay": 0.10,
+    },
+    "NORMAL": {
+        "size": (37, 19),
+        "enemies": 3,
+        "cheese": 10,
+        "heal": 3,
+        "enemy_delay": 0.30,
+        "move_delay": 0.12,
+    },
+    "HARD": {
+        "size": (41, 21),
+        "enemies": 4,
+        "cheese": 13,
+        "heal": 2,
+        "enemy_delay": 0.22,
+        "move_delay": 0.14,
+    },
+}
+CHEESE_MOVE_DELAY = 1.2
+CHEESE_MOVE_CHANCE = 0.6  # шанс, що сир спробує рухнутися
+
+
 
 def _level_path(level: int) -> Path:
     return LEVELS / f"LVL{level}.txt"
@@ -138,14 +148,10 @@ def render_world(
             cell = maze.grid[y][x]
             kind, var = sprite_for_cell(cell)
             rect = pygame.Rect(x * tile, y * tile, tile, tile)
-
-            # draw base (floor) first so transparent sprites look nice
             if "floor" in sprites:
                 screen.blit(sprites["floor"], rect)
             else:
                 draw_fallback_rect(screen, rect, "floor")
-
-            # then overlay the actual cell if it's not floor
             if kind != "floor":
                 key = kind if var is None else f"{kind}_{var}"
                 if key in sprites:
@@ -155,23 +161,19 @@ def render_world(
                 else:
                     draw_fallback_rect(screen, rect, key)
 
-    # player on top
     prect = pygame.Rect(player.x * tile, player.y * tile, tile, tile)
     if "player" in sprites:
         screen.blit(sprites["player"], prect)
     else:
         draw_fallback_rect(screen, prect, "player")
 
-    # --- Draw enemies ---
     for e in enemies:
         rect = pygame.Rect(e.x * tile, e.y * tile, tile, tile)
 
-        # Якщо є спрайт ворога
         enemy_img = sprites.get("enemy")
         if enemy_img:
             screen.blit(enemy_img, rect)
         else:
-            # fallback: червоний квадрат, щоб точно бачити
             pygame.draw.rect(screen, (200, 60, 60), rect)
 
     # --- HUD ---
@@ -184,8 +186,7 @@ def render_world(
 
     heart_img = sprites.get("heart")
     if heart_img:
-        # центруємо сердечка по висоті HUD
-        y_heart = hud_y + 8  # можеш змінити на 10/6 якщо хочеш вище/нижче
+        y_heart = hud_y + 8
         gap = 4
         for i in range(player.hp):
             screen.blit(heart_img, (x + i * (heart_img.get_width() + gap), y_heart))
@@ -195,7 +196,6 @@ def render_world(
         screen.blit(hp_surf, (x, hud_y + 8))
         x += hp_surf.get_width() + 30
 
-    # --- Coins icon + text ---
     coin_img = sprites.get("coin") or sprites.get("cheese")  # якщо coin нема — беремо cheese
     icon_size = 18
     gap = 6
@@ -211,10 +211,6 @@ def render_world(
 
 
 def try_move(maze: Maze, player: Player, dx: int, dy: int) -> str:
-    """
-    Performs one movement step using the same rules as the console version.
-    Returns a small status string (used for messages / debug).
-    """
     nx, ny = player.x + dx, player.y + dy
     if not (0 <= nx < maze.width and 0 <= ny < maze.height):
         return "blocked"
@@ -252,7 +248,6 @@ def try_move(maze: Maze, player: Player, dx: int, dy: int) -> str:
         message_timer = 2.0
         running = False
 
-    # empty / other walkable
     player.x, player.y = nx, ny
     return "moved"
 
@@ -276,6 +271,39 @@ def spawn_cheese(maze: Maze, count: int, start_pos: tuple[int, int]) -> None:
     for (x, y) in empties[:count]:
         maze.cell_at(x, y).symbol = CHEESE_SYM
 
+def move_cheese(maze: Maze, player: Player, enemies: list) -> None:
+    # Збираємо всі позиції сиру
+    cheeses: list[tuple[int, int]] = []
+    for y in range(maze.height):
+        for x in range(maze.width):
+            cell = maze.cell_at(x, y)
+            if cell.symbol == CHEESE_SYM:
+                cheeses.append((x, y))
+
+    enemy_positions = {(e.x, e.y) for e in enemies}
+    px, py = player.x, player.y
+
+    dirs = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+    random.shuffle(cheeses)
+
+    for (x, y) in cheeses:
+        if random.random() > CHEESE_MOVE_CHANCE:
+            continue
+
+        random.shuffle(dirs)
+        for dx, dy in dirs:
+            nx, ny = x + dx, y + dy
+            if not (0 <= nx < maze.width and 0 <= ny < maze.height):
+                continue
+
+            target = maze.cell_at(nx, ny)
+            if target.walkable and target.symbol == " " and (nx, ny) != (px, py) and (nx, ny) not in enemy_positions:
+                # перемістили сир
+                maze.cell_at(x, y).symbol = " "
+                target.symbol = CHEESE_SYM
+                break
+
+
 def spawn_heal_items(maze: Maze, count: int, start_pos: tuple[int, int]) -> None:
     sx, sy = start_pos
     empties: list[tuple[int, int]] = []
@@ -295,39 +323,44 @@ def spawn_heal_items(maze: Maze, count: int, start_pos: tuple[int, int]) -> None
         maze.cell_at(x, y).symbol = HEAL_SYM
 
 
-def run_main_menu(screen: pygame.Surface, clock: pygame.time.Clock, font: pygame.font.Font,  bg: pygame.Surface | None,) -> tuple[bool, str]:
-        """
-        Повертає (start_game, player_name).
-        start_game=False => вихід з програми.
-        """
+def run_main_menu(screen: pygame.Surface, clock: pygame.time.Clock, font: pygame.font.Font,  bg: pygame.Surface | None,) -> tuple[bool, str, str]:
         name = ""
-        active = True  # поле вводу активне завжди (поки так простіше)
+        active = True
+        difficulty = "HARD"
 
         while True:
             dt = clock.tick(60) / 1000.0
 
-
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    return False, ""
+                    return False, "", "HARD"
 
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
-                        return False, ""
+                        return False, "", "HARD"
 
                     if event.key == pygame.K_RETURN:
                         final_name = name.strip() or "Player"
-                        return True, final_name
+                        return True, final_name, difficulty
 
                     if event.key == pygame.K_BACKSPACE:
                         name = name[:-1]
+
+                    if event.key == pygame.K_1:
+                        difficulty = "EASY"
+                    if event.key == pygame.K_2:
+                        difficulty = "NORMAL"
+                    if event.key == pygame.K_3:
+                        difficulty = "HARD"
+                    elif len(event.unicode) == 1 and event.unicode.isprintable():
+                        if len(name) < 16:
+                            name += event.unicode
+
                     else:
-                        # вводимо лише нормальні символи
                         if len(event.unicode) == 1 and event.unicode.isprintable():
                             if len(name) < 16:
                                 name += event.unicode
 
-            # ---- render menu ----
             if bg:
                 screen.blit(bg, (0, 0))
             else:
@@ -336,7 +369,6 @@ def run_main_menu(screen: pygame.Surface, clock: pygame.time.Clock, font: pygame
             title = font.render("=MICE MAZE=", True, ((180, 235, 180)))
             screen.blit(title, (40, 40))
 
-            # ---- UI PANEL ----
             panel = pygame.Surface((380, 300), pygame.SRCALPHA)
             panel.fill((10, 40, 20, 130))
             screen.blit(panel, (20, 20))
@@ -360,10 +392,78 @@ def run_main_menu(screen: pygame.Surface, clock: pygame.time.Clock, font: pygame
             text = font.render(name if name else "?...", True, (235, 235, 235) if name else (150, 150, 150))
             screen.blit(text, (box.x + 10, box.y + 8))
 
+            diff_text = font.render(f"Складність: {difficulty} (1–3)", True, (140, 200, 140))
+            screen.blit(diff_text, (40, 310))
+
             hint = font.render("Натисни Enter, щоб почати гру", True, (140, 200, 140))
             screen.blit(hint, (40, 285))
 
+
             pygame.display.flip()
+
+def run_pause_menu(screen: pygame.Surface, clock: pygame.time.Clock, font: pygame.font.Font) -> str:
+    bg = screen.copy()
+    selected = 0
+    options = ["Продовжити", "В головне меню"]
+
+    while True:
+        dt = clock.tick(60) / 1000.0
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return "quit"
+
+            if event.type == pygame.KEYDOWN:
+                if event.key in (pygame.K_ESCAPE, pygame.K_p):
+                    return "resume"
+
+                if event.key in (pygame.K_UP, pygame.K_w):
+                    selected = (selected - 1) % len(options)
+
+                if event.key in (pygame.K_DOWN, pygame.K_s):
+                    selected = (selected + 1) % len(options)
+
+                if event.key == pygame.K_RETURN:
+                    return "resume" if selected == 0 else "menu"
+
+        screen.blit(bg, (0, 0))
+
+        overlay = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 150))
+        screen.blit(overlay, (0, 0))
+
+        w, h = screen.get_size()
+        panel = pygame.Rect(0, 0, 360, 200)
+        panel.center = (w // 2, h // 2)
+
+        panel_surf = pygame.Surface(panel.size, pygame.SRCALPHA)
+        panel_surf.fill((10, 40, 20, 180))  # темно-зелений, прозорий
+        screen.blit(panel_surf, panel.topleft)
+
+        pygame.draw.rect(screen, (140, 200, 140), panel, width=2, border_radius=10)
+
+        title = font.render("ПАУЗА", True, (180, 235, 180))
+        screen.blit(title, (panel.x + 20, panel.y + 18))
+
+        for i, text in enumerate(options):
+            y = panel.y + 70 + i * 36
+
+            if i == selected:
+                highlight = pygame.Rect(panel.x + 15, y - 4, panel.width - 30, 32)
+                pygame.draw.rect(screen, (20, 60, 30), highlight, border_radius=6)
+
+                color = (210, 245, 210)  # світлий текст на темному
+            else:
+                color = (230, 230, 230)  # звичайний світлий текст
+
+            line = font.render(text, True, color)
+            screen.blit(line, (panel.x + 30, y))
+
+        hint = font.render("Enter - вибрати", True, (160, 200, 160))
+        screen.blit(hint, (panel.x + 20, panel.y + 150))
+
+        pygame.display.flip()
+
 
 def main() -> None:
     import os
@@ -381,29 +481,29 @@ def main() -> None:
         menu_bg = pygame.image.load(MENU_BG.as_posix()).convert()
         menu_bg = pygame.transform.scale(menu_bg, (640, 360))
 
-    # --- MENU ---
-    start, player_name = run_main_menu(screen, clock, font, menu_bg)
+    start, player_name, difficulty = run_main_menu(screen, clock, font, menu_bg)
     if not start:
         pygame.quit()
-        sys.exit(0)
+        return "quit"
 
     pygame.display.set_caption("Labirint (pygame)")
 
-    grid, (sx, sy) = generate_perfect_maze_cells(41, 21)
+    cfg = DIFFICULTIES[difficulty]
+    grid, (sx, sy) = generate_perfect_maze_cells(*cfg["size"])
     maze = Maze(grid)
 
     player = Player(x=sx, y=sy, name=player_name, coins=0)
     player.hp = PLAYER_MAX_HP
 
     invuln = 0.0  # щоб не знімало хп 60 раз/сек
-    ENEMY_COUNT = 4
-    enemies = spawn_enemies(maze, ENEMY_COUNT, (sx, sy))
+    enemies = spawn_enemies(maze, cfg["enemies"], (sx, sy))
 
-    ENEMY_DELAY = 0.25
-    enemy_cd = 0.0
+    ENEMY_DELAY = cfg["enemy_delay"]
+    MOVE_DELAY = cfg["move_delay"]
 
-    spawn_cheese(maze, CHEESE_COUNT, (sx, sy))
-    spawn_heal_items(maze, HEAL_COUNT, (sx, sy))
+    spawn_cheese(maze, cfg["cheese"], (sx, sy))
+    cheese_cd = CHEESE_MOVE_DELAY
+    spawn_heal_items(maze, cfg["heal"], (sx, sy))
 
     tile = DEFAULT_TILE
     hud_h = 40
@@ -416,12 +516,15 @@ def main() -> None:
     message_timer = 0.0
 
     running = True
-    MOVE_DELAY = 0.12  # сек: меньше = быстрее шаги
     move_cooldown = 0.0
     enemy_cd = ENEMY_DELAY
 
     while running:
         dt = clock.tick(FPS) / 1000.0
+        cheese_cd -= dt
+        if cheese_cd <= 0:
+            move_cheese(maze, player, enemies)
+            cheese_cd = CHEESE_MOVE_DELAY
         invuln = max(0.0, invuln - dt)
         move_cooldown = max(0.0, move_cooldown - dt)
 
@@ -430,15 +533,32 @@ def main() -> None:
                 running = False
 
             if event.type == pygame.KEYDOWN:
-                if event.key in (pygame.K_ESCAPE,):
-                    running = False
+                if event.key == pygame.K_ESCAPE:
+                    action = run_pause_menu(screen, clock, font)
+
+                    if action == "quit":
+                        running = False
+                        back_to_menu = False
+
+                    elif action == "menu":
+                        running = False
+                        back_to_menu = True
+
+                if event.key == pygame.K_F1:
+                    player.hp = min(PLAYER_MAX_HP, player.hp + 1)
+                    message = f"CHEAT: +1 HP ({player.hp}/{PLAYER_MAX_HP})"
+                    message_timer = 1.2
+
+                if event.key == pygame.K_F2:
+                    enemies.clear()
+                    message = "CHEAT: all enemies removed"
+                    message_timer = 1.2
 
         enemy_cd -= dt
         if enemy_cd <= 0:
             move_enemies(maze, enemies)
             enemy_cd = ENEMY_DELAY
 
-        # ===== Movement while holding keys =====
         keys = pygame.key.get_pressed()
 
         dx, dy = 0, 0
@@ -451,16 +571,13 @@ def main() -> None:
         elif keys[pygame.K_d] or keys[pygame.K_RIGHT]:
             dx = 1
 
-        # делаем шаг только если кулдаун закончился
         if (dx or dy) and move_cooldown <= 0.0:
             message = try_move(maze, player, dx, dy)
             message_timer = 1.2
             move_cooldown = MOVE_DELAY
-        # ======================================
 
         render_world(screen, maze, player, enemies, sprites, tile, font)
 
-        # перевірка зіткнення з ворогами
         for e in enemies:
             if e.x == player.x and e.y == player.y and invuln <= 0:
                 player.hp -= ENEMY_DAMAGE
@@ -473,7 +590,6 @@ def main() -> None:
             message_timer = 2.0
             running = False
 
-        # simple message line
         if message_timer > 0:
             message_timer -= dt
             msg = font.render(message, True, (235, 235, 235))
@@ -482,8 +598,14 @@ def main() -> None:
         pygame.display.flip()
 
     pygame.quit()
-    sys.exit(0)
+    return "menu" if back_to_menu else "quit"
+
+def app():
+    while True:
+        res = main()
+        if res != "menu":
+            break
 
 
 if __name__ == "__main__":
-    main()
+    app()

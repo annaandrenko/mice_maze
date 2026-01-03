@@ -5,13 +5,6 @@ def clear():
     os.system("cls" if os.name == "nt" else "clear")
 
 def get_key() -> str:
-    """
-    Returns a single key press as a string:
-      - 'w','a','s','d','p','b' (lowercase)
-      - 'esc', 'enter'
-      - arrow keys as 'up','down','left','right'
-    Works on Windows (msvcrt) and Unix (termios/tty).
-    """
     if os.name == "nt":
         import msvcrt
         while True:

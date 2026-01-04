@@ -10,7 +10,7 @@
     },
     "Player": {
       "coins": 1,
-      "updated_at": "2026-01-04T05:53:33"
+      "updated_at": "2026-01-04T18:19:59"
     },
     "н77": {
       "coins": 0,
@@ -18,8 +18,12 @@
     },
     "Аня": {
       "coins": 87,
-      "updated_at": "2026-01-04T04:45:12"
+      "updated_at": "2026-01-04T18:24:00"
+    },
+    "__CUSTOM__": {
+      "coins": 27,
+      "updated_at": "2026-01-04T18:23:49"
     }
   },
-  "last_player": "Player"
+  "last_player": "Аня"
 }

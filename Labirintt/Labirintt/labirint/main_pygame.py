@@ -14,6 +14,8 @@ from maze import Maze, generate_perfect_maze_cells
 from player import Player
 from Enemy import spawn_enemies, move_enemies
 from enum import Enum, auto
+from maze import load_map
+from Enemy import Enemy
 
 class GameState(Enum):
     MENU = auto()
@@ -97,7 +99,6 @@ def load_sprites(tile: int) -> Dict[str, pygame.Surface]:
     def load(name: str) -> Optional[pygame.Surface]:
         return _safe_load_png(SPRITES_DIR / name, tile)
 
-    # Base tiles
     sprites["floor"] = load("floor.png") or None
     sprites["wall"] = load("wall.png") or None
     sprites["player"] = load("player.png") or None
@@ -277,7 +278,6 @@ def spawn_cheese(maze: Maze, count: int, start_pos: tuple[int, int]) -> None:
         maze.cell_at(x, y).symbol = CHEESE_SYM
 
 def move_cheese(maze: Maze, player: Player, enemies: list) -> None:
-    # Збираємо всі позиції сиру
     cheeses: list[tuple[int, int]] = []
     for y in range(maze.height):
         for x in range(maze.width):
@@ -303,7 +303,6 @@ def move_cheese(maze: Maze, player: Player, enemies: list) -> None:
 
             target = maze.cell_at(nx, ny)
             if target.walkable and target.symbol == " " and (nx, ny) != (px, py) and (nx, ny) not in enemy_positions:
-                # перемістили сир
                 maze.cell_at(x, y).symbol = " "
                 target.symbol = CHEESE_SYM
                 break
@@ -398,9 +397,11 @@ def run_main_menu(screen: pygame.Surface, clock: pygame.time.Clock, font: pygame
                     elif event.key == pygame.K_3:
                         difficulty = "HARD"
 
-                    if event.key == pygame.K_e:
-                        # запускаємо редактор замість гри
+                    if event.key == pygame.K_e:#запуск редактора
                         return True, "__EDITOR__", difficulty
+                    if event.key == pygame.K_c:#запуск кастомногог рівня
+                        return True, "__CUSTOM__", difficulty
+
 
 
                     elif name_active:
@@ -637,7 +638,6 @@ def run_end_menu(screen: pygame.Surface, clock: pygame.time.Clock, font: pygame.
 
 
     while True:
-        # краще створити один раз ДО while True:
         title_font = pygame.font.SysFont(None, 54)
         sub_font = pygame.font.SysFont(None, 26)
         btn_font = pygame.font.SysFont(None, 34)
@@ -718,7 +718,6 @@ def _load_all_players() -> dict:
         data.setdefault("last_player", "")
         return data
     except Exception:
-        # якщо файл зіпсований/порожній — не валимо гру
         return {"players": {}, "last_player": ""}
 
 
@@ -781,6 +780,7 @@ def main() -> None:
     pygame.mixer.music.load("assets/Sounds/sound.mp3")
     pygame.mixer.music.set_volume(0.4)  # 0.0 – 1.0
     pygame.mixer.music.play(-1)  # -1 = нескінченний циклввввц
+
     menu_bg = None
     if MENU_BG.exists():
         menu_bg = pygame.image.load(MENU_BG.as_posix()).convert()
@@ -802,23 +802,45 @@ def main() -> None:
 
 
     cfg = DIFFICULTIES[difficulty]
-    grid, (sx, sy) = generate_perfect_maze_cells(*cfg["size"])
-    maze = Maze(grid)
+    PLAYER_START_SYM = "S"
+    is_custom = (player_name == "__CUSTOM__")
+    if player_name == "__CUSTOM__":
+        level_path = (LEVELS / "LVL_EDITOR.txt").as_posix()
+        grid = load_map(level_path)
+        maze = Maze(grid)
+
+        pos = maze.find_symbol(PLAYER_START_SYM)
+        if pos:
+            sx, sy = pos
+            maze.cell_at(sx, sy).symbol = " "
+        else:
+            sx, sy = 1, 1
+
+        enemies = []
+        for y in range(maze.height):
+            for x in range(maze.width):
+                if maze.cell_at(x, y).symbol == ENEMY_SYM:
+                    enemies.append(Enemy(x=x, y=y))
+                    maze.cell_at(x, y).symbol = " "
+    else:
+        grid, (sx, sy) = generate_perfect_maze_cells(*cfg["size"])
+        maze = Maze(grid)
+        enemies = spawn_enemies(maze, cfg["enemies"], (sx, sy))
+        spawn_cheese(maze, cfg["cheese"], (sx, sy))
+        spawn_heal_items(maze, cfg["heal"], (sx, sy))
 
     saved_coins = load_player_coins(player_name)
     player = Player(x=sx, y=sy, name=player_name, coins=saved_coins)
     player.hp = PLAYER_MAX_HP
 
-    invuln = 0.0  # щоб не знімало хп 60 раз/сек
-    enemies = spawn_enemies(maze, cfg["enemies"], (sx, sy))
-
     ENEMY_DELAY = cfg["enemy_delay"]
     MOVE_DELAY = cfg["move_delay"]
+    invuln = 0.0
 
-    spawn_cheese(maze, cfg["cheese"], (sx, sy))
-    cheese_cd = CHEESE_MOVE_DELAY
-    spawn_heal_items(maze, cfg["heal"], (sx, sy))
-
+    if not is_custom:
+        enemies = spawn_enemies(maze, cfg["enemies"], (sx, sy))
+        spawn_cheese(maze, cfg["cheese"], (sx, sy))
+        spawn_heal_items(maze, cfg["heal"], (sx, sy))
 
     tile = DEFAULT_TILE
     hud_h = 40
@@ -835,6 +857,7 @@ def main() -> None:
     enemy_cd = ENEMY_DELAY
     end_state = None
     back_to_menu = False
+    cheese_cd = CHEESE_MOVE_DELAY
 
     while running:
         dt = clock.tick(FPS) / 1000.0

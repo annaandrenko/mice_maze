@@ -7,6 +7,9 @@ from main_pygame import (
     HEAL_SYM, ENEMY_SYM, LEVELS, render_world
 )
 
+PLAYER_START_SYM = "S"
+FLOOR_SYM = " "
+
 class LevelEditor:
     def __init__(self, screen, clock, font):
         self.screen = screen
@@ -21,6 +24,8 @@ class LevelEditor:
         self.sprites = load_sprites(self.tile)
         self.width = 31
         self.height = 15
+        self.message = ""
+        self.message_timer = 0
 
         self.maze = Maze([[Cell(WALL_SYM) for _ in range(self.width)]
                           for _ in range(self.height)])
@@ -60,6 +65,8 @@ class LevelEditor:
                     self.load_level("LVL_EDITOR.txt")
                 elif event.key == pygame.K_g:
                     self.generate_maze(31, 15)
+                elif event.key == pygame.K_p:
+                    self.current_symbol = PLAYER_START_SYM
                 elif event.key == pygame.K_t:
                     if self.mode == "EDIT":
                         self.mode = "TEST"
@@ -100,7 +107,15 @@ class LevelEditor:
 
                 if 0 <= gx < self.width and 0 <= gy < self.height:
                     if event.button == 1:
+                        if self.current_symbol == PLAYER_START_SYM:
+                            self.clear_symbol(PLAYER_START_SYM)
+                            self.start_pos = (gx, gy)
+
+                        if self.current_symbol == EXIT_SYM:
+                            self.clear_symbol(EXIT_SYM)
+
                         self.maze.grid[gy][gx].symbol = self.current_symbol
+
                     elif event.button == 3:
                         self.maze.grid[gy][gx].symbol = " "
 
@@ -112,16 +127,23 @@ class LevelEditor:
         lines = path.read_text(encoding="utf-8").splitlines()
         h = len(lines)
         w = max(len(line) for line in lines) if lines else 0
-
         norm = [line.ljust(w) for line in lines]
 
-        # будуємо grid з Cell
         self.width, self.height = w, h
         self.maze = Maze([[Cell(ch) for ch in row] for row in norm])
 
+        pos = self.maze.find_symbol(PLAYER_START_SYM)
+        if pos:
+            self.start_pos = pos
+
     def render(self):
         from player import Player
-        dummy_player = Player(0, 0, "Editor", 0)
+        px, py = self.start_pos
+
+        if self.mode == "TEST":
+            px, py = self.test_x, self.test_y
+
+        dummy_player = Player(px, py, "Editor", 0)
 
         render_world(
             self.screen,
@@ -133,27 +155,14 @@ class LevelEditor:
             font=self.font
         )
 
-        if self.mode == "TEST":
-            r = pygame.Rect(
-                self.test_x * self.tile,
-                self.test_y * self.tile,
-                self.tile,
-                self.tile
-            )
-            player_img = self.sprites.get("player")
-            if player_img:
-                self.screen.blit(player_img, r)
-            else:
-                pygame.draw.rect(self.screen, (255, 200, 50), r)
-
         hints = [
             "EDITOR MODE",
-            "ESC - Back to menu | T - Toggle TEST mode",
-            "LMB - place | RMB - erase",
-            "W=wall  SPACE=floor  C=cheese  X=exit",
+            "ESC- Back to menu  T- Toggle TEST mode",
+            "LMB- place  RMB- erase",
+            "W=wall  SPACE=floor  C=cheese  X=exit  P=start",
             "H=heal  E=enemy",
-            "G-generate  L-load  F5-save  S-save",
-            "TEST: WASD/Arrows - move (through non-walls)",
+            "G-generate  L-load  S-save",
+            "TEST: WASD/Arrows - move",
         ]
 
         y = 6
@@ -162,20 +171,51 @@ class LevelEditor:
             self.screen.blit(surf, (6, y))
             y += 18
 
+        if self.message_timer > 0 and self.message:
+            self.message_timer -= 1
+            surf = self.font.render(self.message, True, (255, 120, 120))
+            self.screen.blit(surf, (6, self.height * self.tile - 24))
         pygame.display.flip()
 
     def save_level(self, filename):
-        LEVELS.mkdir(parents=True, exist_ok=True)  # <-- додай це
+        start_count = self.count_symbol(PLAYER_START_SYM)
+        exit_count = self.count_symbol(EXIT_SYM)
+
+        if start_count != 1 or exit_count != 1:
+            if start_count != 1 and exit_count != 1:
+                self.show_message("Не можна зберегти: постав 1 старт (P) і 1 вихід (X).")
+            elif start_count != 1:
+                self.show_message("Не можна зберегти: постав 1 старт гравця (P).")
+            else:
+                self.show_message("Не можна зберегти: постав 1 вихід (X).")
+            return
+
+        LEVELS.mkdir(parents=True, exist_ok=True)
         path = LEVELS / filename
         with open(path, "w", encoding="utf-8") as f:
             for row in self.maze.grid:
                 f.write("".join(cell.symbol for cell in row) + "\n")
+
+        self.show_message("Рівень збережено", seconds=2)
 
     def generate_maze(self, w: int, h: int) -> None:
         grid, (sx, sy) = generate_perfect_maze_cells(w, h)
         self.maze = Maze(grid)
         self.width, self.height = self.maze.width, self.maze.height
         self.start_pos = (sx, sy)
+
+    def clear_symbol(self, sym: str) -> None:
+        for row in self.maze.grid:
+            for cell in row:
+                if cell.symbol == sym:
+                    cell.symbol = FLOOR_SYM
+
+    def count_symbol(self, sym: str) -> int:
+        return sum(1 for row in self.maze.grid for cell in row if cell.symbol == sym)
+
+    def show_message(self, text: str, seconds: float = 2.0) -> None:
+        self.message = text
+        self.message_timer = int(seconds * 60)  # якщо 60 FPS
 
 
 def run_editor(screen, clock, font):

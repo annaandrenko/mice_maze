@@ -13,12 +13,10 @@ INNER_H = 10
 
 
 def load_map(path: str) -> List[List[Cell]]:
-    from cell_definer import cell_from_char
-
     grid: List[List[Cell]] = []
     with open(path, "r", encoding="utf-8") as f:
         for line in f.read().splitlines():
-            grid.append([cell_from_char(ch) for ch in line])
+            grid.append([Cell(ch) for ch in line])
 
     w = max((len(r) for r in grid), default=0)
     for r in grid:

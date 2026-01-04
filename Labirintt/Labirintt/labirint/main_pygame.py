@@ -149,6 +149,7 @@ def render_world(
     tile: int,
     font: pygame.font.Font,
 ) -> None:
+
     screen.fill((15, 15, 15))
 
     for y in range(maze.height):
@@ -168,6 +169,7 @@ def render_world(
                     screen.blit(sprites[kind], rect)
                 else:
                     draw_fallback_rect(screen, rect, key)
+
 
     prect = pygame.Rect(player.x * tile, player.y * tile, tile, tile)
     if "player" in sprites:
@@ -395,6 +397,11 @@ def run_main_menu(screen: pygame.Surface, clock: pygame.time.Clock, font: pygame
                         difficulty = "NORMAL"
                     elif event.key == pygame.K_3:
                         difficulty = "HARD"
+
+                    if event.key == pygame.K_e:
+                        # запускаємо редактор замість гри
+                        return True, "__EDITOR__", difficulty
+
 
                     elif name_active:
                         if event.key == pygame.K_BACKSPACE:
@@ -780,6 +787,11 @@ def main() -> None:
         menu_bg = pygame.transform.scale(menu_bg, (640, 360))
 
     start, player_name, difficulty = run_main_menu(screen, clock, font, menu_bg)
+    if player_name == "__EDITOR__":
+        from editor import run_editor
+        run_editor(screen, clock, font)
+        return "menu"
+
     if not start:
         pygame.quit()
         return "quit"

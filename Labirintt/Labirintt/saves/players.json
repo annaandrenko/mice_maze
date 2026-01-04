@@ -6,20 +6,20 @@
     },
     "а": {
       "coins": 0,
-      "updated_at": "2026-01-03T23:18:59"
+      "updated_at": "2026-01-04T05:34:35"
     },
     "Player": {
-      "coins": 0,
-      "updated_at": "2026-01-03T23:43:10"
+      "coins": 1,
+      "updated_at": "2026-01-04T05:53:33"
     },
     "н77": {
       "coins": 0,
       "updated_at": "2026-01-03T23:27:26"
     },
     "Аня": {
-      "coins": 24,
-      "updated_at": "2026-01-04T00:26:30"
+      "coins": 87,
+      "updated_at": "2026-01-04T04:45:12"
     }
   },
-  "last_player": "Аня"
+  "last_player": "Player"
 }
